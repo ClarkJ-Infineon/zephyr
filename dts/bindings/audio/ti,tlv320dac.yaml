@@ -10,7 +10,10 @@ include: i2c-device.yaml
 properties:
   reset-gpios:
     type: phandle-array
-    required: true
+    description: |
+      GPIO connected to the codec RESET pin. Optional: on boards where RESET is
+      tied to a pull-up rather than a host GPIO, omit this property and the
+      driver relies on the I2C software reset instead.
 
   use-volume-control-pin:
     type: boolean
