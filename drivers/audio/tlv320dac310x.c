@@ -35,7 +35,7 @@ struct codec_driver_data {
 
 static struct codec_driver_config codec_device_config = {
 	.bus		= I2C_DT_SPEC_INST_GET(0),
-	.reset_gpio	= GPIO_DT_SPEC_INST_GET(0, reset_gpios),
+	.reset_gpio	= GPIO_DT_SPEC_INST_GET_OR(0, reset_gpios, {0}),
 	.speaker_gain	= DT_INST_PROP(0, speaker_gain),
 };
 
@@ -71,7 +71,8 @@ static int codec_initialize(const struct device *dev)
 		return -ENODEV;
 	}
 
-	if (!gpio_is_ready_dt(&dev_cfg->reset_gpio)) {
+	if (dev_cfg->reset_gpio.port != NULL &&
+	    !gpio_is_ready_dt(&dev_cfg->reset_gpio)) {
 		LOG_ERR("GPIO device not ready");
 		return -ENODEV;
 	}
@@ -91,12 +92,15 @@ static int codec_configure(const struct device *dev,
 	}
 
 	/* Configure reset GPIO, and set the line to inactive, which will also
-	 * de-assert the reset line and thus enable the codec.
+	 * de-assert the reset line and thus enable the codec. Boards that tie
+	 * RESET to a pull-up omit the GPIO and rely on the software reset below.
 	 */
-	ret = gpio_pin_configure_dt(&dev_cfg->reset_gpio, GPIO_OUTPUT_INACTIVE);
-	if (ret < 0) {
-		LOG_ERR("Failed to configure reset GPIO (%d)", ret);
-		return ret;
+	if (dev_cfg->reset_gpio.port != NULL) {
+		ret = gpio_pin_configure_dt(&dev_cfg->reset_gpio, GPIO_OUTPUT_INACTIVE);
+		if (ret < 0) {
+			LOG_ERR("Failed to configure reset GPIO (%d)", ret);
+			return ret;
+		}
 	}
 
 	codec_soft_reset(dev);
