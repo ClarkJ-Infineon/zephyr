@@ -572,7 +572,15 @@ static void ifx_cat1_dma_isr(struct ifx_cat1_dma_irq_context *irq_context)
 		status = -EIO;
 		break;
 	case CY_DMA_INTR_CAUSE_CURR_PTR_NULL: /* Current descr pointer is NULL   */
-		LOG_ERR("DMA error: Current descriptor pointer is NULL (cause=0x%x)", intr_cause);
+		/*
+		 * A peripheral-triggered channel (e.g. the I2S/TDM audio path) hits this
+		 * whenever its descriptor chain has drained between blocks -- a benign
+		 * underrun, not a bus fault, and the consumer's callback ignores the
+		 * status here. Logging it at ERR on every occurrence flooded the log and
+		 * burned CPU in the log subsystem during streaming, so keep it at debug.
+		 */
+		LOG_DBG("DMA ch%u: current descriptor pointer NULL (underrun, cause=0x%x)",
+			channel, intr_cause);
 		status = -EIO;
 		break;
 	case CY_DMA_INTR_CAUSE_ACTIVE_CH_DISABLED: /* Active channel is disabled      */
