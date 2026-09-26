@@ -24,10 +24,22 @@ dmic_dev: &dmic0 {
 &dmic0_ch2 {
 	status = "okay";
 	use-alt-io;
+	/* FIR1_DECIM_3: with the default CIC_DECIM_32, this gives a total PDM
+	 * oversampling ratio of 96 (1.536 MHz at 16 kHz), matching the mic's
+	 * datasheet "Normal mode" clock band.
+	 *
+	 * fir1-scale lowers the filter output gain to match the larger
+	 * accumulator that comes with this oversampling ratio; 10 is the
+	 * vendor BSP's own value for this same 96x ratio.
+	 */
+	fir1-decimation = <2>;
+	fir1-scale = <10>;
 };
 
 &dmic0_ch3 {
 	status = "okay";
+	fir1-decimation = <2>;
+	fir1-scale = <10>;
 };
 
 &dma0 {
