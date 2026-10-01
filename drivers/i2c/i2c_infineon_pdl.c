@@ -799,21 +799,18 @@ static int _i2c_controller_transfer_async(const struct device *dev, uint16_t add
 	if (tx_size) {
 		data->pending = (rx_size) ? CAT1_I2C_PENDING_TX_RX : CAT1_I2C_PENDING_TX;
 		data->tx_config.xferPending = (rx_size != 0u) || hold_bus;
-		data->tx_config.continueXfer = append;
 
 		/* A read following a write always re-addresses, so the read phase
 		 * of a write-read pair never appends.  It still takes the hold,
 		 * because a read run it continues into starts here.
 		 */
 		data->rx_config.xferPending = hold_bus;
-		data->rx_config.continueXfer = false;
 
 		Cy_SCB_I2C_MasterWrite(config->base, &data->tx_config, &data->context);
 		/* Receive covered by interrupt handler - i2c_isr_handler() */
 	} else if (rx_size) {
 		data->pending = CAT1_I2C_PENDING_RX;
 		data->rx_config.xferPending = hold_bus;
-		data->rx_config.continueXfer = append;
 		Cy_SCB_I2C_MasterRead(config->base, &data->rx_config, &data->context);
 	} else if (tx != NULL) {
 		/* A zero-length write addresses the target and stops, which is
@@ -823,7 +820,6 @@ static int _i2c_controller_transfer_async(const struct device *dev, uint16_t add
 		 */
 		data->pending = CAT1_I2C_PENDING_TX;
 		data->tx_config.xferPending = false;
-		data->tx_config.continueXfer = false;
 		Cy_SCB_I2C_MasterWrite(config->base, &data->tx_config, &data->context);
 	} else {
 		return -EIO;
