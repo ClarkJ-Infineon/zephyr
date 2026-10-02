@@ -8,5 +8,14 @@
 # PSC3xxF_tm is the TrustZone aware J-Link device entry matching this board
 # target (CONFIG_TRUSTED_EXECUTION_SECURE=y) and the 256 KB flash of
 # PSC3M5FDS2AFQ1.
+# The SEGGER flash loader for every PSC3 device entry exposes a single flash
+# bank at the SAHB non-secure alias 0x22000000. Zephyr links this board at the
+# CBUS secure alias 0x12000000 (CONFIG_TRUSTED_EXECUTION_SECURE=y), which the
+# loader does not recognise as a bank, so a J-Link chip erase succeeds and the
+# subsequent program fails - leaving the board blank. OpenOCD models all four
+# aliases, so it is the default flash runner here.
+board_runner_args(openocd "--target-handle=TARGET.cm33")
+include(${ZEPHYR_BASE}/boards/common/openocd.board.cmake)
+
 board_runner_args(jlink "--device=PSC3xxF_tm" "--speed=4000")
 include(${ZEPHYR_BASE}/boards/common/jlink.board.cmake)
