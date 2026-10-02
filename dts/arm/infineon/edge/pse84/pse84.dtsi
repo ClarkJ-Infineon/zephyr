@@ -1458,5 +1458,14 @@
 			interrupts = <163 4>;
 			status = "disabled";
 		};
+
+		gcnano: gcnano@44800800 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "infineon,gpu";
+			reg = <0x44800800 0x800>;
+			interrupts = <162 3>;
+			status = "disabled";
+		};
 	};
 };
