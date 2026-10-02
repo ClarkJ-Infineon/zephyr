@@ -29,8 +29,19 @@ if(CONFIG_LVGL)
 
   file(GLOB_RECURSE LVGL_SRC_FILES CONFIGURE_DEPENDS
     ${LVGL_DIR}/src/*.c
-    ${LVGL_DIR}/src/*.S
   )
+
+  # LVGL ships Helium (MVE) blend kernels as .S sources. They include LVGL's
+  # public C headers before their own LV_USE_DRAW_SW_ASM guard, and those
+  # headers are not assembly-safe, so they only assemble when the Helium path
+  # is actually selected. Globbing them unconditionally breaks every
+  # MVE-capable target (Cortex-M55/M85) even with LV_DRAW_SW_ASM_NONE.
+  if(CONFIG_LV_DRAW_SW_ASM_HELIUM)
+    file(GLOB_RECURSE LVGL_ASM_SRC_FILES CONFIGURE_DEPENDS
+      ${LVGL_DIR}/src/*.S
+    )
+    list(APPEND LVGL_SRC_FILES ${LVGL_ASM_SRC_FILES})
+  endif()
 
   set(LVGL_EXCLUDE_PATTERNS
       "${LVGL_DIR}/src/osal/lv_cmsis_rtos2.c"
