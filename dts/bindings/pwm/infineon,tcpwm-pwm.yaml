@@ -33,6 +33,25 @@ properties:
   pinctrl-names:
     required: true
 
+  clocks:
+    required: true
+    description: |
+      Peripheral clock divider feeding this TCPWM counter.
+
+      The driver dereferences this unconditionally - PWM_PERI_CLOCK_INIT in
+      pwm_infineon_tcpwm.c reads peri-group, div-type and channel straight
+      off the phandle - so it has always been mandatory in practice. Leaving
+      it undeclared here meant omitting it produced a wall of macro expansion
+      errors from devicetree_generated.h rather than a diagnostic naming the
+      missing property.
+
+      The divider must belong to the same peripheral instance and group as
+      the TCPWM block, which the block's clk-dst encodes. Several PWM
+      channels may share one divider when they share a period.
+
+      Example:
+        clocks = <&peri0_group1_16bit_0>;
+
 pwm-cells:
   - channel
   - period
