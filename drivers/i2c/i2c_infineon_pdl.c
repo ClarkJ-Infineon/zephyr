@@ -136,6 +136,23 @@ static const cy_stc_scb_i2c_config_t _i2c_default_config = {
 
 typedef void (*ifx_cat1_i2c_event_callback_t)(void *callback_arg, uint32_t event);
 
+/*
+ * Nothing outside the driver may be left reachable from the block once a
+ * transfer is over. The buffers a transfer is given belong to the caller of
+ * i2c_transfer(), and that caller is usually pointing the driver at locals on
+ * its own stack.
+ */
+static void _i2c_forget_buffers(const struct device *dev)
+{
+	struct ifx_cat1_i2c_data *data = dev->data;
+
+	data->pending = CAT1_I2C_PENDING_NONE;
+	data->rx_config.buffer = NULL;
+	data->rx_config.bufferSize = 0;
+	data->tx_config.buffer = NULL;
+	data->tx_config.bufferSize = 0;
+}
+
 cy_rslt_t _i2c_abort_async(const struct device *dev)
 {
 	struct ifx_cat1_i2c_data *data = dev->data;
@@ -143,11 +160,17 @@ cy_rslt_t _i2c_abort_async(const struct device *dev)
 
 	uint16_t timeout_us = 10000;
 
-	if (data->pending == CAT1_I2C_PENDING_NONE) {
+	/* Only the block itself can say whether it is finished. data->pending
+	 * is the driver's opinion, and the case this has to cope with is
+	 * exactly the one where the two disagree.
+	 */
+	if ((data->pending == CAT1_I2C_PENDING_NONE) &&
+	    (0UL == (CY_SCB_I2C_MASTER_BUSY & data->context.masterStatus))) {
+		_i2c_forget_buffers(dev);
 		return CY_RSLT_SUCCESS;
 	}
 
-	if (data->pending == CAT1_I2C_PENDING_RX) {
+	if (data->context.masterRdDir) {
 		Cy_SCB_I2C_MasterAbortRead(config->base, &data->context);
 	} else {
 		Cy_SCB_I2C_MasterAbortWrite(config->base, &data->context);
@@ -162,10 +185,26 @@ cy_rslt_t _i2c_abort_async(const struct device *dev)
 	}
 
 	if (0 == timeout_us) {
+		/* An abort is a request, not a stop: with no RX FIFO in use
+		 * Cy_SCB_I2C_MasterAbortRead() only shortens the buffer, and the
+		 * transfer ends when the slave next clocks a byte. A slave that
+		 * has stopped clocking never ends it, and the block is left
+		 * holding a pointer into the caller's buffer -- which, one
+		 * return later, is a dead stack frame it goes on writing bytes
+		 * into. Stopping the block is what actually takes the pointer
+		 * back.
+		 */
+		LOG_ERR("I2C abort timed out, resetting the block");
+		Cy_SCB_I2C_Disable(config->base, &data->context);
+		Cy_SCB_ClearRxFifo(config->base);
+		Cy_SCB_ClearTxFifo(config->base);
+		ifx_cat1_i2c_enable(config, data);
+		_i2c_forget_buffers(dev);
+
 		return CY_SCB_I2C_MASTER_MANUAL_TIMEOUT;
 	}
 
-	data->pending = CAT1_I2C_PENDING_NONE;
+	_i2c_forget_buffers(dev);
 
 	return CY_RSLT_SUCCESS;
 }
@@ -928,6 +967,9 @@ static int ifx_cat1_i2c_transfer(const struct device *dev, struct i2c_msg *msg, 
 				(void)Cy_SCB_I2C_MasterSendStop(config->base, 1U, &data->context);
 			}
 
+			(void)_i2c_abort_async(dev);
+			data->irq_cause &= ~I2C_CAT1_EVENTS_MASK;
+
 			pm_policy_device_power_lock_put(dev);
 			(void)pm_device_runtime_put(dev);
 			k_sem_give(&data->operation_sem);
@@ -969,6 +1011,15 @@ static int ifx_cat1_i2c_transfer(const struct device *dev, struct i2c_msg *msg, 
 
 		/* Check for an error during the transfer */
 		if (data->error) {
+			/* The error handler has already tried to abort, but it
+			 * cannot be trusted to have succeeded, and this is the
+			 * point of no return: past it the caller's buffers stop
+			 * existing. Make sure the block is not still pointed at
+			 * them.
+			 */
+			(void)_i2c_abort_async(dev);
+			data->irq_cause &= ~I2C_CAT1_EVENTS_MASK;
+
 			pm_policy_device_power_lock_put(dev);
 			(void)pm_device_runtime_put(dev);
 			k_sem_give(&data->operation_sem);
