@@ -17,12 +17,19 @@ if(CONFIG_LVGL)
 
   add_subdirectory_ifdef(CONFIG_LV_USE_NEMA_GFX nemagfx)
 
+  if(CONFIG_LV_USE_DRAW_VG_LITE)
+    zephyr_include_directories(${LVGL_DIR}/src/libs/vg_lite_driver/inc)
+    zephyr_include_directories(${LVGL_DIR}/src/libs/vg_lite_driver/VGLite)
+    zephyr_include_directories(${LVGL_DIR}/src/libs/vg_lite_driver/VGLiteKernel)
+  endif()
+
   zephyr_compile_definitions(LV_CONF_INCLUDE_SIMPLE=1)
   zephyr_library_compile_definitions(_POSIX_C_SOURCE=200809L)
   zephyr_compile_definitions(LV_CONF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/include/lv_conf.h")
 
   file(GLOB_RECURSE LVGL_SRC_FILES CONFIGURE_DEPENDS
     ${LVGL_DIR}/src/*.c
+    ${LVGL_DIR}/src/*.S
   )
 
   set(LVGL_EXCLUDE_PATTERNS
@@ -50,6 +57,9 @@ if(CONFIG_LVGL)
       "${LVGL_DIR}/src/stdlib/micropython/*"
       "${LVGL_DIR}/src/stdlib/uefi/*"
 
+      # The VG-Lite kernel HAL is provided by gpus/lvgl_vg_lite_hal_zephyr.c
+      "${LVGL_DIR}/src/libs/vg_lite_driver/lv_vg_lite_hal/*"
+
       "${LVGL_DIR}/src/debugging/test/*"
   )
 
@@ -74,6 +84,11 @@ if(CONFIG_LVGL)
   zephyr_library_sources_ifdef(CONFIG_LV_Z_USE_FILESYSTEM lvgl_fs.c)
   zephyr_library_sources_ifdef(CONFIG_LV_Z_MEM_POOL_SYS_HEAP lvgl_mem.c)
   zephyr_library_sources_ifdef(CONFIG_LV_Z_SHELL lvgl_shell.c)
+
+  zephyr_library_sources_ifdef(CONFIG_LV_USE_GPU_VG_LITE
+    gpus/lvgl_vg_lite_hal_zephyr.c
+    gpus/lvgl_vg_lite_hal_stubs.c
+  )
 
   zephyr_library_sources(input/lvgl_common_input.c)
   zephyr_library_sources_ifdef(CONFIG_LV_Z_POINTER_INPUT input/lvgl_pointer_input.c)

@@ -446,3 +446,7 @@
 &display_controller {
 	interrupts = <140 4>;
 };
+
+&gcnano {
+	interrupts = <139 4>;
+};
