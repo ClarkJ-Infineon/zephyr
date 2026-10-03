@@ -73,6 +73,7 @@ struct ifx_cat1_i2c_data {
 	struct k_sem transfer_sem;
 	bool error;
 	bool rx_overrun;
+	uint32_t abort_timeouts;
 	uint32_t async_pending;
 	struct ifx_cat1_clock clock;
 	struct i2c_target_config *p_target_config;
@@ -194,7 +195,22 @@ cy_rslt_t _i2c_abort_async(const struct device *dev)
 		 * into. Stopping the block is what actually takes the pointer
 		 * back.
 		 */
-		LOG_ERR("I2C abort timed out, resetting the block");
+
+		/* This runs from the SCB interrupt handler, where a log call is
+		 * not free: in immediate mode it blocks on the UART for several
+		 * milliseconds while the interrupt is still being serviced. The
+		 * errors also arrive in bursts, so logging every one turns a
+		 * recoverable bus fault into a visible stall of the whole
+		 * system. Report the first one and count the rest; the count is
+		 * what tells you whether the bus is getting worse, and a reader
+		 * only needs it when something else has already gone wrong.
+		 */
+		data->abort_timeouts++;
+		if (data->abort_timeouts == 1U) {
+			LOG_ERR("I2C abort timed out, resetting the block "
+				"(further occurrences counted, not logged)");
+		}
+
 		Cy_SCB_I2C_Disable(config->base, &data->context);
 		Cy_SCB_ClearRxFifo(config->base);
 		Cy_SCB_ClearTxFifo(config->base);
