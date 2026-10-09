@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: waveshare-4p3
+boards:
+  /kit_pse84_eval.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: boards/kit_pse84_eval.overlay

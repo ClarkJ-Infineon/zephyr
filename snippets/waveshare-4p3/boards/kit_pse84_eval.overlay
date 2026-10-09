@@ -1,0 +1,92 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Waveshare 4.3" MIPI-DSI panel on KIT_PSE84_EVAL.
+ *
+ * Enables the display controller, the panel and the frame buffer the two
+ * share, so an application only has to ask for `zephyr,display`.
+ */
+
+#include <zephyr/dt-bindings/display/panel.h>
+#include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
+
+/*
+ * The display controller takes its pixel clock from CLK_HF12, which is off by
+ * default. Without it the DC runs but emits no valid video stream, and this
+ * panel gates its backlight on locking to one - so the visible symptom is a
+ * dark screen with an otherwise healthy pipeline.
+ *
+ * CLKPATH3 divided by 2 gives 25 MHz.
+ */
+&clk_hf12 {
+	status = "okay";
+	source-path = <IFX_CLK_HF_IN_CLKPATH3>;
+	clock-div = <IFX_CLK_HF_DIVIDE_BY_2>;
+};
+
+/ {
+	chosen {
+		zephyr,display = &display_controller;
+	};
+
+	soc {
+		/*
+		 * display_infineon_dc.c resolves its frame buffer from a node
+		 * labelled `gfx_mem` (GFX_BUF_ADDR_BASE). SOCMEM spans
+		 * 0x26000000..0x26500000; this carves 2 MB out immediately
+		 * after the board's m55_data reservation.
+		 *
+		 * The controller DMAs this buffer out of SOCMEM while the CM55
+		 * renders into it through its D-cache, so the region must be
+		 * non-cacheable - otherwise dirty cache lines may never be
+		 * written back and the DC scans out stale contents. The
+		 * symptom is torn or garbled output while every flush returns
+		 * success.
+		 */
+		gfx_mem: memory@26140000 {
+			compatible = "zephyr,memory-region", "mmio-sram";
+			zephyr,memory-region = "GFX_MEMORY";
+			reg = <0x26140000 DT_SIZE_M(2)>;
+			zephyr,memory-attr = <DT_MEM_ARM(ATTR_MPU_RAM_NOCACHE)>;
+		};
+	};
+};
+
+&i2c0 {
+	status = "okay";
+
+	waveshare_panel: waveshare_panel@45 {
+		compatible = "waveshare,4p3";
+		reg = <0x45>;
+		status = "okay";
+		pixel-format = <PANEL_PIXEL_FORMAT_RGB_888>;
+		height = <480>;
+		width = <832>;
+	};
+};
+
+/*
+ * 832 rather than 800 horizontal pixels: the panel's own timing controller
+ * expects the wider active region, and the extra columns fall outside the
+ * visible glass.
+ */
+&display_controller {
+	status = "okay";
+
+	height = <480>;
+	width = <832>;
+
+	pixel-clock-khz = <33768>;
+	hsync-width = <10>;
+	hfp = <210>;
+	hbp = <20>;
+	vsync-width = <5>;
+	vfp = <20>;
+	vbp = <20>;
+
+	data-lanes = <1>;
+	per-lane-mbps = <810>;
+
+	input-pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
+	panel = <&waveshare_panel>;
+};
